@@ -13,7 +13,11 @@ def _compute_high_dim_affinities(X, perplexity):
 
     num_samples = X.shape[0]
     
-    # Initialize beta (precision of Gaussian distribution)
+    # beta_i (for each point i) will be propotional to the inverse of
+    # variance of that point's guassian distribution
+    # It will be initialized with 1 and then its value will be
+    # found using binary search such that the entropy of the 
+    # distribution matches the (log of) target perplexity
     beta = tr.ones(num_samples, 1)
     
     # Init with zeros It will be filled later with binary
@@ -46,14 +50,14 @@ def _compute_high_dim_affinities(X, perplexity):
             Hdiff = H_target - H
 
             if Hdiff > 0:
-                # Need more entropy, increase variance (decrease B)
+                # Need more entropy, increase variance (decrease beta)
                 betamax = beta[i].clone()
                 if betamin is None:
                     beta[i] = beta[i] / 2
                 else:
                     beta[i] = (beta[i] + betamin) / 2
             else:
-                # Need less entropy, decrease variance (increase B)
+                # Need less entropy, decrease variance (increase beta)
                 betamin = beta[i].clone()
                 if betamax is None:
                     beta[i] = beta[i] / 2
@@ -77,8 +81,8 @@ def reduce_tsne(
     perplexity=50.0,
     n_iter=1000,
     lr=0.5,
-    annealing_factor=4,
-    annealing_steps=100
+    exaggeration_factor=4,
+    exaggeration_steps=100
 ):
     num_samples = X.shape[0]
 
@@ -89,9 +93,9 @@ def reduce_tsne(
     P = (P + P.T) / (2.0 * tr.sum(P))
 
     # Early exaggeration
-    P_exg = P * annealing_factor
+    P_exg = P * exaggeration_factor
 
-    # Initialize low-dimensional map Y randomly
+    # Initialize low-dimensional map randomly
     R = tr.randn(num_samples, dim_low, requires_grad=True)
 
     optimizer = tr.optim.Adam([R], lr=lr)
@@ -121,7 +125,7 @@ def reduce_tsne(
         optimizer.step()
 
         # Anneal P to remove early exaggeration
-        if i == annealing_steps:
+        if i == exaggeration_steps:
             P_exg = P
 
     return R.detach()
